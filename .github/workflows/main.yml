@@ -2,7 +2,7 @@ name: Krold Mega Bot (Cloud)
 
 on:
   schedule:
-    - cron: '0 */2 * * *' # <--- Ab har 2 ghante mein chalega
+    - cron: '0 */4 * * *' # Har 4 ghante mein chalega
   workflow_dispatch:      # Manual run button
 
 permissions:
@@ -32,9 +32,7 @@ jobs:
         
       - name: Run Mega Bot
         env:
-          # YouTube aur Insta dono ke secrets yahan hone chahiye
           YT_TOKEN_BASE64: ${{ secrets.YT_TOKEN_BASE64 }}
-          INSTA_SESSION: ${{ secrets.INSTA_SESSION }} 
         run: python mega_bot.py
         
       - name: Save History
