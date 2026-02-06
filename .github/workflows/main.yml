@@ -1,11 +1,11 @@
-name: MovieBox Scraper Bot
+name: Krold Mega Bot (Cloud)
 on:
   schedule:
-    - cron: '0 */6 * * *' # Har 6 ghante chalega
-  workflow_dispatch: # Manual button
+    - cron: '0 */4 * * *' # Har 4 ghante chalega
+  workflow_dispatch:      # Manual button bhi rahega
 
 jobs:
-  scrape-and-upload:
+  run-cloud-bot:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
@@ -16,27 +16,18 @@ jobs:
           python-version: '3.10'
           
       - name: Install Libraries
-        run: pip install requests beautifulsoup4 google-api-python-client google-auth
+        run: pip install requests beautifulsoup4 google-api-python-client google-auth-oauthlib
         
-      - name: Run Scraper Script
+      - name: Run The Bot
         env:
           GDRIVE_API_KEY: ${{ secrets.GDRIVE_API_KEY }}
-        run: python scraper.py
+          YT_TOKEN_BASE64: ${{ secrets.YT_TOKEN_BASE64 }}
+        run: python mega_bot.py
         
-      - name: Save History to GitHub
+      - name: Save History
         run: |
-          # Git configuration
           git config --global user.name 'KroldBot'
           git config --global user.email 'bot@krold.it'
-          
-          # History file ensure karo
-          touch history.txt
           git add history.txt
-          
-          # Check karo agar change hua hai tabhi commit karo
-          if git diff --staged --quiet; then
-            echo "Koi change nahi hua history mein. Skipping commit."
-          else
-            git commit -m "Update video history"
-            git push
-          fi
+          git commit -m "Processed new video" || exit 0
+          git push
