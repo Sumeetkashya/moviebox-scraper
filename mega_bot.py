@@ -27,36 +27,39 @@ def get_services():
     if creds.expired and creds.refresh_token: creds.refresh(Request())
     return build('drive', 'v3', credentials=creds), build('youtube', 'v3', credentials=creds)
 
-def post_to_instagram(video_path, caption):
-    print("📸 Instagram Posting: Video Mode with FastStart...")
+def post_to_instagram(video_path, thumbnail_path, caption):
+    print("📸 Instagram Posting: Fresh Login Mode...")
     cl = Client()
     cl.request_timeout = 300 
     
+    # --- 🛡️ FRESH LOGIN LOGIC ---
+    # Hum purana session use NAHI karenge taaki IP conflict na ho
     try:
-        if "INSTA_SESSION" in os.environ:
-            session_json = base64.b64decode(os.environ["INSTA_SESSION"]).decode()
-            cl.set_settings(json.loads(session_json))
+        print("🔑 Logging in with Password...")
         cl.login(INSTA_USER, INSTA_PASS)
         
-        time.sleep(5)
+        # Thoda delay taaki Instagram shaq na kare
+        time.sleep(10)
         
-        print("📤 Uploading Video...")
-        # FIX: Using video_upload instead of clip_upload (More stable)
-        # Ye bhi Reel hi banega agar aspect ratio 9:16 hai
-        cl.video_upload(video_path, caption)
+        print("📤 Uploading Video with Thumbnail...")
+        # Thumbnail wapas lagaya hai kyunki Auto-Gen fail ho raha tha
+        cl.video_upload(video_path, caption, thumbnail=thumbnail_path)
         
         print("✅ Instagram Reel Posted Successfully!")
         return True
     except Exception as e:
         print(f"❌ Instagram Error: {e}")
+        # Agar challenge maanga toh hum kuch nahi kar sakte cloud par
+        if "challenge" in str(e).lower():
+            print("⚠️ Challenge Required! (Bot stuck due to IP change)")
         return False
 
-def process_video(input_path, output_path):
-    print("🎬 Video Processing: Adding FastStart Metadata...")
+def process_video(input_path, output_path, thumb_path):
+    print("🎬 Video Processing: FastStart + Thumbnail...")
     try:
         clip = VideoFileClip(input_path)
         
-        # ✂️ Aspect Ratio & Resize (Same as before)
+        # ✂️ 9:16 Crop
         w, h = clip.size
         target_ratio = 9/16
         if (w/h) > target_ratio:
@@ -64,6 +67,7 @@ def process_video(input_path, output_path):
             if new_width % 2 != 0: new_width -= 1
             clip = clip.crop(x1=w/2 - new_width/2, width=new_width, height=h)
         
+        # 📏 720p Resize
         clip = clip.resize(height=1280)
         if clip.w % 2 != 0: clip = clip.resize(width=clip.w-1)
         
@@ -75,14 +79,19 @@ def process_video(input_path, output_path):
                     .set_opacity(0.85).margin(right=30, top=80, opacity=0).set_pos(("right", "top")))
             final_clip = CompositeVideoClip([final_clip, logo])
 
-        # 💾 THE REAL FIX IS HERE (ffmpeg_params)
-        # '-movflags +faststart' moves metadata to the front so Insta accepts it instantly
+        # 💾 Video Save (FastStart + yuv420p)
         final_clip.write_videofile(
             output_path, codec="libx264", audio_codec="aac", fps=24, 
             preset="medium", bitrate="2500k",
             ffmpeg_params=['-movflags', '+faststart', '-pix_fmt', 'yuv420p'], 
             verbose=False, logger=None
         )
+        
+        # 🖼️ Thumbnail Generation
+        print("🖼️ Generating Thumbnail...")
+        frame = final_clip.get_frame(1.0)
+        img = PIL.Image.fromarray(frame).convert("RGB")
+        img.save(thumb_path, quality=95)
         
         clip.close()
         return True
@@ -105,18 +114,18 @@ def scrape_moviebox():
     except: return None
 
 def main():
-    print("🚀 Krold Bot: FastStart Fix...")
+    print("🚀 Krold Mega Bot Live...")
     video_url = scrape_moviebox()
     if not video_url:
         print("💤 No new content."); return
 
-    raw, final = "raw.mp4", "final.mp4"
+    raw, final, thumb = "raw.mp4", "final.mp4", "thumb.jpg"
     
     r = requests.get(video_url, stream=True)
     with open(raw, 'wb') as f:
         for chunk in r.iter_content(chunk_size=1024): f.write(chunk)
 
-    if not process_video(raw, final): return
+    if not process_video(raw, final, thumb): return
 
     # YouTube (Skip if Full)
     print("📺 Posting to YouTube Shorts...")
@@ -133,7 +142,7 @@ def main():
     except Exception as e: print(f"❌ YT Generic Error: {e}")
 
     # Instagram
-    post_to_instagram(final, f"{random.choice(CAPTIONS)}\n.\n{HASHTAGS}")
+    post_to_instagram(final, thumb, f"{random.choice(CAPTIONS)}\n.\n{HASHTAGS}")
 
     # Drive
     try:
@@ -143,7 +152,7 @@ def main():
     except: pass
 
     # Cleanup
-    for f in [raw, final]: 
+    for f in [raw, final, thumb]: 
         if os.path.exists(f): os.remove(f)
     print("🎉 All Done!")
 
