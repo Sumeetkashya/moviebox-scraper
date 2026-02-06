@@ -42,30 +42,45 @@ def get_services():
         creds.refresh(Request())
     return build('drive', 'v3', credentials=creds), build('youtube', 'v3', credentials=creds)
 
+# --- 📸 ROBUST INSTAGRAM FUNCTION (Retry Logic) ---
 def post_to_instagram(video_path, thumbnail_path, caption):
-    print("📸 Posting to Instagram Reels...")
+    print("📸 Posting to Instagram Reels (Retry Mode)...")
+    
+    cl = Client()
+    cl.request_timeout = 60  # Time badha diya taaki server connection na kaate
+    
+    # 1. Login Attempt
     try:
-        cl = Client()
-        
-        # 1. Load Session
         if "INSTA_SESSION" in os.environ:
-            print("🔑 Loading Session from Secrets...")
+            print("🔑 Loading Session...")
             session_b64 = os.environ["INSTA_SESSION"]
             session_json = base64.b64decode(session_b64).decode()
             cl.set_settings(json.loads(session_json))
-        
-        # 2. Login
         cl.login(INSTA_USER, INSTA_PASS)
-        
-        # 3. Upload Reel
-        print("📤 Uploading Reel with Thumbnail...")
-        cl.clip_upload(video_path, caption, thumbnail=thumbnail_path)
-        print("✅ Instagram Reel Posted Successfully!")
-        return True
-        
     except Exception as e:
-        print(f"❌ Instagram Error: {e}")
-        return False
+        print(f"⚠️ Login Issue: {e}")
+
+    # 2. Upload Attempt (3 Baar Try karega)
+    for attempt in range(1, 4):
+        try:
+            print(f"📤 Uploading Reel... (Attempt {attempt}/3)")
+            
+            # Thoda wait karte hain taaki Insta block na kare
+            time.sleep(5) 
+            
+            cl.clip_upload(video_path, caption, thumbnail=thumbnail_path)
+            print("✅ Instagram Reel Posted Successfully!")
+            return True
+            
+        except Exception as e:
+            print(f"❌ Attempt {attempt} Failed: {e}")
+            if attempt < 3:
+                print("⏳ Waiting 20 seconds before retry...")
+                time.sleep(20) # 20 second ruk kar wapas try karega
+            else:
+                print("❌ All attempts failed.")
+                return False
+# --------------------------------------------------
 
 def process_video(input_path, output_path, thumb_path):
     print("🎬 Editing Video & Generating Thumbnail...")
@@ -86,13 +101,12 @@ def process_video(input_path, output_path, thumb_path):
         # Video Save
         final_clip.write_videofile(output_path, codec="libx264", audio_codec="aac", fps=24, preset="ultrafast", verbose=False, logger=None)
         
-        # --- 🛠️ THUMBNAIL FIX (RGBA -> RGB) ---
+        # Thumbnail Save (RGB Fix)
         print("🖼️ Generating Thumbnail...")
-        frame = final_clip.get_frame(1.0) # 1 sec par snapshot lo
-        img = PIL.Image.fromarray(frame)  # PIL Image banao
-        img = img.convert("RGB")          # Transparency hatao (Convert to RGB)
-        img.save(thumb_path, quality=95)  # Ab Save karo
-        # ---------------------------------------
+        frame = final_clip.get_frame(1.0)
+        img = PIL.Image.fromarray(frame)
+        img = img.convert("RGB")
+        img.save(thumb_path, quality=95)
         
         clip.close()
         return True
@@ -166,7 +180,7 @@ def main():
     except Exception as e:
         print(f"❌ YouTube Error: {e}")
 
-    # 5. Upload to Instagram (With Fixed Thumbnail)
+    # 5. Upload to Instagram (Retry Logic Added)
     insta_caption = f"{caption_text}\n.\n.\n{HASHTAGS}"
     post_to_instagram(processed_video, thumbnail_img, insta_caption)
 
