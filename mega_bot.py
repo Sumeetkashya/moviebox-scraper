@@ -28,9 +28,9 @@ def get_services():
     return build('drive', 'v3', credentials=creds), build('youtube', 'v3', credentials=creds)
 
 def post_to_instagram(video_path, caption):
-    print("📸 Instagram Posting: Direct Mode (No Thumbnail)...")
+    print("📸 Instagram Posting: Video Mode with FastStart...")
     cl = Client()
-    cl.request_timeout = 300 # 5 Minute Timeout
+    cl.request_timeout = 300 
     
     try:
         if "INSTA_SESSION" in os.environ:
@@ -38,12 +38,12 @@ def post_to_instagram(video_path, caption):
             cl.set_settings(json.loads(session_json))
         cl.login(INSTA_USER, INSTA_PASS)
         
-        # Thoda delay taaki login settle ho jaye
         time.sleep(5)
         
-        print("📤 Uploading Reel (Letting Insta pick cover)...")
-        # ⚠️ Thumbnail argument hata diya hai error fix karne ke liye
-        cl.clip_upload(video_path, caption)
+        print("📤 Uploading Video...")
+        # FIX: Using video_upload instead of clip_upload (More stable)
+        # Ye bhi Reel hi banega agar aspect ratio 9:16 hai
+        cl.video_upload(video_path, caption)
         
         print("✅ Instagram Reel Posted Successfully!")
         return True
@@ -52,11 +52,11 @@ def post_to_instagram(video_path, caption):
         return False
 
 def process_video(input_path, output_path):
-    print("🎬 Video Processing: 720p Lite...")
+    print("🎬 Video Processing: Adding FastStart Metadata...")
     try:
         clip = VideoFileClip(input_path)
         
-        # ✂️ 9:16 Crop
+        # ✂️ Aspect Ratio & Resize (Same as before)
         w, h = clip.size
         target_ratio = 9/16
         if (w/h) > target_ratio:
@@ -64,25 +64,24 @@ def process_video(input_path, output_path):
             if new_width % 2 != 0: new_width -= 1
             clip = clip.crop(x1=w/2 - new_width/2, width=new_width, height=h)
         
-        # 📏 720p Resize
         clip = clip.resize(height=1280)
         if clip.w % 2 != 0: clip = clip.resize(width=clip.w-1)
         
-        # ✂️ Trim > 59s
         if clip.duration > 59: clip = clip.subclip(0, 59)
         final_clip = clip.fx(vfx.speedx, 1.05)
         
-        # 🏷️ Logo
         if os.path.exists("logo.png"):
             logo = (ImageClip("logo.png").set_duration(final_clip.duration).resize(height=100)
                     .set_opacity(0.85).margin(right=30, top=80, opacity=0).set_pos(("right", "top")))
             final_clip = CompositeVideoClip([final_clip, logo])
 
-        # 💾 Save Video (Pixel Format Fixed)
+        # 💾 THE REAL FIX IS HERE (ffmpeg_params)
+        # '-movflags +faststart' moves metadata to the front so Insta accepts it instantly
         final_clip.write_videofile(
             output_path, codec="libx264", audio_codec="aac", fps=24, 
             preset="medium", bitrate="2500k",
-            ffmpeg_params=['-pix_fmt', 'yuv420p'], verbose=False, logger=None
+            ffmpeg_params=['-movflags', '+faststart', '-pix_fmt', 'yuv420p'], 
+            verbose=False, logger=None
         )
         
         clip.close()
@@ -106,7 +105,7 @@ def scrape_moviebox():
     except: return None
 
 def main():
-    print("🚀 Krold Mega Bot Live...")
+    print("🚀 Krold Bot: FastStart Fix...")
     video_url = scrape_moviebox()
     if not video_url:
         print("💤 No new content."); return
