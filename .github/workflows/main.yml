@@ -1,0 +1,28 @@
+name: MovieBox Scraper Bot
+on:
+  schedule:
+    - cron: '0 */6 * * *' # Har 6 ghante mein chalega
+  workflow_dispatch: # Manual button ke liye
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Run Scraper
+        env:
+          GDRIVE_API_KEY: ${{ secrets.GDRIVE_API_KEY }}
+        run: python scraper.py
+      - name: Save History
+        run: |
+          git config --global user.name 'KroldBot'
+          git config --global user.email 'bot@krold.it'
+          git add history.txt
+          git commit -m "Update history" || exit 0
+          git push
