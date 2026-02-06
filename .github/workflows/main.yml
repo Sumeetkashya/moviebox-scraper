@@ -1,28 +1,42 @@
 name: MovieBox Scraper Bot
 on:
   schedule:
-    - cron: '0 */6 * * *' # Har 6 ghante mein chalega
-  workflow_dispatch: # Manual button ke liye
+    - cron: '0 */6 * * *' # Har 6 ghante chalega
+  workflow_dispatch: # Manual button
 
 jobs:
-  build:
+  scrape-and-upload:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
+      
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.9'
-      - name: Install dependencies
-        run: pip install -r requirements.txt
-      - name: Run Scraper
+          python-version: '3.10' # Updated version
+          
+      - name: Install Libraries
+        run: pip install requests beautifulsoup4 google-api-python-client google-auth
+        
+      - name: Run Scraper Script
         env:
           GDRIVE_API_KEY: ${{ secrets.GDRIVE_API_KEY }}
         run: python scraper.py
-      - name: Save History
+        
+      - name: Save History to GitHub
         run: |
+          # Git configuration
           git config --global user.name 'KroldBot'
           git config --global user.email 'bot@krold.it'
+          
+          # History file ko add karo (agar nayi hai toh bhi)
+          touch history.txt
           git add history.txt
-          git commit -m "Update history" || exit 0
-          git push
+          
+          # Check karo agar kuch change hua hai tabhi commit karo
+          if git diff --staged --quiet; then
+            print("Koi change nahi hua history mein. Skipping commit.")
+          else
+            git commit -m "Update video history"
+            git push
+          fi
