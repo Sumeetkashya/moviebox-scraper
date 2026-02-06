@@ -10,7 +10,6 @@ from moviepy.editor import VideoFileClip, ImageClip, CompositeVideoClip, vfx
 import PIL.Image
 if not hasattr(PIL.Image, 'ANTIALIAS'):
     PIL.Image.ANTIALIAS = PIL.Image.LANCZOS
-# ------------------
 
 # --- CONFIG ---
 PENDING_FOLDER_ID = "1q0fYCs6yAZG6dmlUH6ql4M5eLLbUPa2V"
@@ -18,81 +17,78 @@ MOVIEBOX_URL = "https://moviebox.ph/share/post?id=6469190882641300568&package_na
 INSTA_USER = "uselesss.guys"
 INSTA_PASS = "Maav5nik@me"
 
-CAPTIONS = [
-    "Wait for the twist! 😱", "Ekdum kadak scene! 🔥", 
-    "Ye ending miss mat karna! ✨", "Legendary movie moment 🎬", 
-    "Best scene ever? 🍿"
-]
+CAPTIONS = ["Wait for the twist! 😱", "Ekdum kadak scene! 🔥", "Best scene ever? 🍿", "Unexpected ending! 🤯"]
 HASHTAGS = "#shorts #reels #trending #viral #movies #cinema #uselessguys #kroldit"
 
 def get_services():
     token_data = base64.b64decode(os.environ["YT_TOKEN_BASE64"])
     creds = pickle.loads(token_data)
-    if creds.expired and creds.refresh_token:
-        creds.refresh(Request())
+    if creds.expired and creds.refresh_token: creds.refresh(Request())
     return build('drive', 'v3', credentials=creds), build('youtube', 'v3', credentials=creds)
 
 def post_to_instagram(video_path, thumbnail_path, caption):
-    print("📸 Posting to Instagram (Compressed Mode)...")
+    print("📸 Posting to Instagram (Reel Mode)...")
     cl = Client()
-    # Timeout badhakar 5 minute kar diya
-    cl.request_timeout = 300 
+    cl.request_timeout = 300 # 5 Min Timeout
     
     try:
-        # Session Load
         if "INSTA_SESSION" in os.environ:
-            print("🔑 Loading Session...")
-            session_b64 = os.environ["INSTA_SESSION"]
-            session_json = base64.b64decode(session_b64).decode()
+            session_json = base64.b64decode(os.environ["INSTA_SESSION"]).decode()
             cl.set_settings(json.loads(session_json))
-        
         cl.login(INSTA_USER, INSTA_PASS)
         
-        # Upload
-        print("📤 Uploading Reel (Please wait, might take time)...")
-        # Delay taaki connection stabilize ho
-        time.sleep(10) 
+        print("📤 Uploading Reel...")
+        time.sleep(5)
         cl.clip_upload(video_path, caption, thumbnail=thumbnail_path)
         print("✅ Instagram Reel Posted Successfully!")
         return True
-        
     except Exception as e:
         print(f"❌ Instagram Error: {e}")
         return False
 
 def process_video(input_path, output_path, thumb_path):
-    print("🎬 Editing Video (Compressing for Insta)...")
+    print("🎬 Editing Video (Forcing 9:16 Ratio)...")
     try:
         clip = VideoFileClip(input_path)
-        # Duration check: Agar video 60s se bada hai, toh trim karo (Reels limit)
+        
+        # --- ✂️ ASPECT RATIO FIX (Vertical Crop) ---
+        w, h = clip.size
+        target_ratio = 9/16
+        current_ratio = w/h
+
+        # Agar video chauda hai (Landscape), toh use Vertical Crop karo
+        if current_ratio > target_ratio:
+            new_width = int(h * target_ratio)
+            # Width must be even (FFmpeg requirement)
+            if new_width % 2 != 0: new_width -= 1
+            clip = clip.crop(x1=w/2 - new_width/2, width=new_width, height=h)
+        
+        # Resize to Standard Reel Size (High Quality)
+        clip = clip.resize(height=1920)
+        # Ensure width is even
+        if clip.w % 2 != 0: clip = clip.resize(width=clip.w-1)
+        
+        # Duration Limit (Max 59s for Shorts/Reels)
         if clip.duration > 59:
-            print("✂️ Trimming video to 59s...")
+            print("✂️ Video too long, trimming to 59s...")
             clip = clip.subclip(0, 59)
             
         final_clip = clip.fx(vfx.speedx, 1.05)
         
         if os.path.exists("logo.png"):
-            logo = (ImageClip("logo.png")
-                    .set_duration(final_clip.duration)
-                    .resize(height=120)
-                    .set_opacity(0.85)
-                    .margin(right=25, top=25, opacity=0)
-                    .set_pos(("right", "top")))
+            # Logo Positioning for Vertical Video
+            logo = (ImageClip("logo.png").set_duration(final_clip.duration)
+                    .resize(height=150) # Thoda bada logo vertical screen ke liye
+                    .set_opacity(0.85).margin(right=40, top=100, opacity=0).set_pos(("right", "top")))
             final_clip = CompositeVideoClip([final_clip, logo])
-        
-        # --- 🛠️ COMPRESSION FIX ---
-        # preset='medium' se file size chhota hoga, upload fast hoga
-        # bitrate='3000k' quality maintain karega par size control mein rakhega
+        else:
+            final_clip = final_clip # Fallback if no logo
+
+        # Save with Insta-Safe Settings
         final_clip.write_videofile(
-            output_path, 
-            codec="libx264", 
-            audio_codec="aac", 
-            fps=24, 
-            preset="medium",   # <--- Changed from 'ultrafast' to 'medium'
-            bitrate="3000k",   # <--- Limit bitrate
-            ffmpeg_params=['-pix_fmt', 'yuv420p'], 
-            verbose=False, 
-            logger=None
+            output_path, codec="libx264", audio_codec="aac", fps=24, 
+            preset="medium", bitrate="4000k", 
+            ffmpeg_params=['-pix_fmt', 'yuv420p'], verbose=False, logger=None
         )
         
         # Thumbnail
@@ -104,8 +100,7 @@ def process_video(input_path, output_path, thumb_path):
         clip.close()
         return True
     except Exception as e:
-        print(f"❌ Editing Error: {e}")
-        return False
+        print(f"❌ Editing Error: {e}"); return False
 
 def scrape_moviebox():
     headers = {'User-Agent': 'Mozilla/5.0'}
@@ -123,20 +118,18 @@ def scrape_moviebox():
     except: return None
 
 def main():
-    print("🚀 Krold Bot Started...")
+    print("🚀 Krold Bot Started (Vertical Mode)...")
     video_url = scrape_moviebox()
     if not video_url:
         print("💤 No new video found."); return
 
     raw, final, thumb = "raw.mp4", "final.mp4", "thumb.jpg"
     
-    # Download
-    print("📥 Downloading Video...")
+    print(f"📥 Downloading: {video_url}")
     r = requests.get(video_url, stream=True)
     with open(raw, 'wb') as f:
         for chunk in r.iter_content(chunk_size=1024): f.write(chunk)
 
-    # Edit
     if not process_video(raw, final, thumb): return
 
     # YouTube Upload
