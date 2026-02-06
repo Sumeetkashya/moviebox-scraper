@@ -13,7 +13,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.10' # Updated version
+          python-version: '3.10'
           
       - name: Install Libraries
         run: pip install requests beautifulsoup4 google-api-python-client google-auth
@@ -29,13 +29,13 @@ jobs:
           git config --global user.name 'KroldBot'
           git config --global user.email 'bot@krold.it'
           
-          # History file ko add karo (agar nayi hai toh bhi)
+          # History file ensure karo
           touch history.txt
           git add history.txt
           
-          # Check karo agar kuch change hua hai tabhi commit karo
+          # Check karo agar change hua hai tabhi commit karo
           if git diff --staged --quiet; then
-            print("Koi change nahi hua history mein. Skipping commit.")
+            echo "Koi change nahi hua history mein. Skipping commit."
           else
             git commit -m "Update video history"
             git push
