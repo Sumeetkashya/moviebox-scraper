@@ -3,6 +3,13 @@ from bs4 import BeautifulSoup
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 from google.auth.transport.requests import Request
+
+# --- 🛠️ FIX FOR PIL ERROR (ANTIALIAS) ---
+import PIL.Image
+if not hasattr(PIL.Image, 'ANTIALIAS'):
+    PIL.Image.ANTIALIAS = PIL.Image.LANCZOS
+# ----------------------------------------
+
 from moviepy.editor import VideoFileClip, ImageClip, CompositeVideoClip, vfx
 
 # --- CONFIGURATION ---
@@ -38,24 +45,24 @@ def process_video(input_path, output_path):
     try:
         clip = VideoFileClip(input_path)
         
-        # 1. Speed badhao (1.05x)
+        # 1. Speed Increase (1.05x) - Copyright Safe
         final_clip = clip.fx(vfx.speedx, 1.05)
         
-        # 2. Logo Setup (Bada size: 120px)
+        # 2. Add Logo (Size 120px)
         if os.path.exists("logo.png"):
-            print("✅ Logo mil gaya, laga raha hoon...")
+            print("✅ Logo found, adding to video...")
             logo = (ImageClip("logo.png")
                     .set_duration(final_clip.duration)
-                    .resize(height=120)   
-                    .set_opacity(0.85)    
+                    .resize(height=120)   # Big Size
+                    .set_opacity(0.85)    # Solid Visibility
                     .margin(right=25, top=25, opacity=0) 
                     .set_pos(("right", "top")))
             
             final_clip = CompositeVideoClip([final_clip, logo])
         else:
-            print("⚠️ Warning: 'logo.png' nahi mila! Bina logo ke proceed kar raha hoon.")
+            print("⚠️ Warning: 'logo.png' not found! Skipping logo.")
         
-        # Rendering
+        # Rendering (Ultrafast preset to prevent timeout)
         final_clip.write_videofile(output_path, codec="libx264", audio_codec="aac", fps=24, preset="ultrafast", verbose=False, logger=None)
         clip.close()
         return True
@@ -92,11 +99,11 @@ def main():
     except Exception as e:
         print(f"❌ Login Error: {e}"); return
 
-    # Step 1: Scrape
+    # Step 1: Search
     print("🔍 Searching MovieBox...")
     video_url = scrape_moviebox()
     if not video_url:
-        print("💤 Koi naya video nahi mila."); return
+        print("💤 No new video found."); return
 
     # Step 2: Download
     print(f"📥 Downloading: {video_url}")
