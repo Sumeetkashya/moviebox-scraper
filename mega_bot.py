@@ -27,10 +27,10 @@ def get_services():
     if creds.expired and creds.refresh_token: creds.refresh(Request())
     return build('drive', 'v3', credentials=creds), build('youtube', 'v3', credentials=creds)
 
-def post_to_instagram(video_path, thumbnail_path, caption):
-    print("📸 Instagram Posting: One-Shot Mode (720p)...")
+def post_to_instagram(video_path, caption):
+    print("📸 Instagram Posting: Direct Mode (No Thumbnail)...")
     cl = Client()
-    cl.request_timeout = 200 # Sufficient for compressed video
+    cl.request_timeout = 300 # 5 Minute Timeout
     
     try:
         if "INSTA_SESSION" in os.environ:
@@ -38,21 +38,25 @@ def post_to_instagram(video_path, thumbnail_path, caption):
             cl.set_settings(json.loads(session_json))
         cl.login(INSTA_USER, INSTA_PASS)
         
-        # Human-like delay
-        time.sleep(10)
-        cl.clip_upload(video_path, caption, thumbnail=thumbnail_path)
+        # Thoda delay taaki login settle ho jaye
+        time.sleep(5)
+        
+        print("📤 Uploading Reel (Letting Insta pick cover)...")
+        # ⚠️ Thumbnail argument hata diya hai error fix karne ke liye
+        cl.clip_upload(video_path, caption)
+        
         print("✅ Instagram Reel Posted Successfully!")
         return True
     except Exception as e:
         print(f"❌ Instagram Error: {e}")
         return False
 
-def process_video(input_path, output_path, thumb_path):
-    print("🎬 Video Processing: Optimized for Social Media...")
+def process_video(input_path, output_path):
+    print("🎬 Video Processing: 720p Lite...")
     try:
         clip = VideoFileClip(input_path)
         
-        # ✂️ Aspect Ratio Fix (9:16 Vertical)
+        # ✂️ 9:16 Crop
         w, h = clip.size
         target_ratio = 9/16
         if (w/h) > target_ratio:
@@ -60,31 +64,26 @@ def process_video(input_path, output_path, thumb_path):
             if new_width % 2 != 0: new_width -= 1
             clip = clip.crop(x1=w/2 - new_width/2, width=new_width, height=h)
         
-        # 📏 Resize to 720x1280 (Lite & Fast)
+        # 📏 720p Resize
         clip = clip.resize(height=1280)
         if clip.w % 2 != 0: clip = clip.resize(width=clip.w-1)
         
-        # ✂️ Trim if > 59s
+        # ✂️ Trim > 59s
         if clip.duration > 59: clip = clip.subclip(0, 59)
         final_clip = clip.fx(vfx.speedx, 1.05)
         
-        # 🏷️ Add Logo
+        # 🏷️ Logo
         if os.path.exists("logo.png"):
             logo = (ImageClip("logo.png").set_duration(final_clip.duration).resize(height=100)
                     .set_opacity(0.85).margin(right=30, top=80, opacity=0).set_pos(("right", "top")))
             final_clip = CompositeVideoClip([final_clip, logo])
 
-        # 💾 Write with Insta-Safe Params
+        # 💾 Save Video (Pixel Format Fixed)
         final_clip.write_videofile(
             output_path, codec="libx264", audio_codec="aac", fps=24, 
-            preset="medium", bitrate="2500k", # Reduced size
+            preset="medium", bitrate="2500k",
             ffmpeg_params=['-pix_fmt', 'yuv420p'], verbose=False, logger=None
         )
-        
-        # 🖼️ Generate Thumbnail
-        frame = final_clip.get_frame(1.0)
-        img = PIL.Image.fromarray(frame).convert("RGB")
-        img.save(thumb_path, quality=90)
         
         clip.close()
         return True
@@ -112,17 +111,15 @@ def main():
     if not video_url:
         print("💤 No new content."); return
 
-    raw, final, thumb = "raw.mp4", "final.mp4", "thumb.jpg"
+    raw, final = "raw.mp4", "final.mp4"
     
-    # Download
     r = requests.get(video_url, stream=True)
     with open(raw, 'wb') as f:
         for chunk in r.iter_content(chunk_size=1024): f.write(chunk)
 
-    # Edit
-    if not process_video(raw, final, thumb): return
+    if not process_video(raw, final): return
 
-    # YouTube Logic (Skip if limit reached)
+    # YouTube (Skip if Full)
     print("📺 Posting to YouTube Shorts...")
     try:
         drive, yt = get_services()
@@ -136,10 +133,10 @@ def main():
         else: print(f"❌ YT Error: {e}")
     except Exception as e: print(f"❌ YT Generic Error: {e}")
 
-    # Instagram Logic
-    post_to_instagram(final, thumb, f"{random.choice(CAPTIONS)}\n.\n{HASHTAGS}")
+    # Instagram
+    post_to_instagram(final, f"{random.choice(CAPTIONS)}\n.\n{HASHTAGS}")
 
-    # Drive Backup
+    # Drive
     try:
         meta = {'name': f'Krold_{int(time.time())}.mp4', 'parents': [PENDING_FOLDER_ID]}
         drive.files().create(body=meta, media_body=MediaFileUpload(final)).execute()
@@ -147,7 +144,7 @@ def main():
     except: pass
 
     # Cleanup
-    for f in [raw, final, thumb]: 
+    for f in [raw, final]: 
         if os.path.exists(f): os.remove(f)
     print("🎉 All Done!")
 
