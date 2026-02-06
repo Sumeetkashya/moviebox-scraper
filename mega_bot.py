@@ -42,31 +42,29 @@ def get_services():
         creds.refresh(Request())
     return build('drive', 'v3', credentials=creds), build('youtube', 'v3', credentials=creds)
 
-# --- 📸 ROBUST INSTAGRAM FUNCTION (Retry Logic) ---
+# --- 📸 INSTAGRAM FUNCTION ---
 def post_to_instagram(video_path, thumbnail_path, caption):
-    print("📸 Posting to Instagram Reels (Retry Mode)...")
+    print("📸 Posting to Instagram Reels...")
     
     cl = Client()
-    cl.request_timeout = 60  # Time badha diya taaki server connection na kaate
+    cl.request_timeout = 90  # Timeout badha diya (90s) taaki upload na atke
     
-    # 1. Login Attempt
+    # 1. Login Logic
     try:
         if "INSTA_SESSION" in os.environ:
-            print("🔑 Loading Session...")
+            print("🔑 Loading Session from Secrets...")
             session_b64 = os.environ["INSTA_SESSION"]
             session_json = base64.b64decode(session_b64).decode()
             cl.set_settings(json.loads(session_json))
         cl.login(INSTA_USER, INSTA_PASS)
     except Exception as e:
-        print(f"⚠️ Login Issue: {e}")
+        print(f"⚠️ Login Warning: {e}")
 
-    # 2. Upload Attempt (3 Baar Try karega)
+    # 2. Upload with Retry
     for attempt in range(1, 4):
         try:
             print(f"📤 Uploading Reel... (Attempt {attempt}/3)")
-            
-            # Thoda wait karte hain taaki Insta block na kare
-            time.sleep(5) 
+            time.sleep(5) # Thoda saans lene do bot ko
             
             cl.clip_upload(video_path, caption, thumbnail=thumbnail_path)
             print("✅ Instagram Reel Posted Successfully!")
@@ -76,11 +74,10 @@ def post_to_instagram(video_path, thumbnail_path, caption):
             print(f"❌ Attempt {attempt} Failed: {e}")
             if attempt < 3:
                 print("⏳ Waiting 20 seconds before retry...")
-                time.sleep(20) # 20 second ruk kar wapas try karega
+                time.sleep(20)
             else:
-                print("❌ All attempts failed.")
+                print("❌ All attempts failed. Skipping Insta.")
                 return False
-# --------------------------------------------------
 
 def process_video(input_path, output_path, thumb_path):
     print("🎬 Editing Video & Generating Thumbnail...")
@@ -98,8 +95,18 @@ def process_video(input_path, output_path, thumb_path):
                     .set_pos(("right", "top")))
             final_clip = CompositeVideoClip([final_clip, logo])
         
-        # Video Save
-        final_clip.write_videofile(output_path, codec="libx264", audio_codec="aac", fps=24, preset="ultrafast", verbose=False, logger=None)
+        # --- 🛠️ THE MAGIC FIX (Pixel Format yuv420p) ---
+        # Ye line sabse zaroori hai. Iske bina Insta fail ho raha tha.
+        final_clip.write_videofile(
+            output_path, 
+            codec="libx264", 
+            audio_codec="aac", 
+            fps=24, 
+            preset="ultrafast", 
+            ffmpeg_params=['-pix_fmt', 'yuv420p'],  # <--- YE HAI WO FIX
+            verbose=False, 
+            logger=None
+        )
         
         # Thumbnail Save (RGB Fix)
         print("🖼️ Generating Thumbnail...")
@@ -157,7 +164,7 @@ def main():
     if not process_video(raw_video, processed_video, thumbnail_img):
         return
 
-    # 4. Upload to YouTube
+    # 4. Upload to YouTube (PRIORITY)
     print("📺 Uploading to YouTube...")
     try:
         drive, yt = get_services()
@@ -180,7 +187,7 @@ def main():
     except Exception as e:
         print(f"❌ YouTube Error: {e}")
 
-    # 5. Upload to Instagram (Retry Logic Added)
+    # 5. Upload to Instagram (Fixed with Magic Pixel Format)
     insta_caption = f"{caption_text}\n.\n.\n{HASHTAGS}"
     post_to_instagram(processed_video, thumbnail_img, insta_caption)
 
