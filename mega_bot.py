@@ -42,7 +42,6 @@ def get_services():
         creds.refresh(Request())
     return build('drive', 'v3', credentials=creds), build('youtube', 'v3', credentials=creds)
 
-# --- 📸 UPDATED INSTAGRAM FUNCTION ---
 def post_to_instagram(video_path, thumbnail_path, caption):
     print("📸 Posting to Instagram Reels...")
     try:
@@ -58,7 +57,7 @@ def post_to_instagram(video_path, thumbnail_path, caption):
         # 2. Login
         cl.login(INSTA_USER, INSTA_PASS)
         
-        # 3. Upload Reel WITH THUMBNAIL (Ye fix hai)
+        # 3. Upload Reel
         print("📤 Uploading Reel with Thumbnail...")
         cl.clip_upload(video_path, caption, thumbnail=thumbnail_path)
         print("✅ Instagram Reel Posted Successfully!")
@@ -67,7 +66,6 @@ def post_to_instagram(video_path, thumbnail_path, caption):
     except Exception as e:
         print(f"❌ Instagram Error: {e}")
         return False
-# ----------------------------------
 
 def process_video(input_path, output_path, thumb_path):
     print("🎬 Editing Video & Generating Thumbnail...")
@@ -88,9 +86,13 @@ def process_video(input_path, output_path, thumb_path):
         # Video Save
         final_clip.write_videofile(output_path, codec="libx264", audio_codec="aac", fps=24, preset="ultrafast", verbose=False, logger=None)
         
-        # Thumbnail Save (1 second mark se snapshot lega)
-        final_clip.save_frame(thumb_path, t=1.0)
-        print("🖼️ Thumbnail Generated!")
+        # --- 🛠️ THUMBNAIL FIX (RGBA -> RGB) ---
+        print("🖼️ Generating Thumbnail...")
+        frame = final_clip.get_frame(1.0) # 1 sec par snapshot lo
+        img = PIL.Image.fromarray(frame)  # PIL Image banao
+        img = img.convert("RGB")          # Transparency hatao (Convert to RGB)
+        img.save(thumb_path, quality=95)  # Ab Save karo
+        # ---------------------------------------
         
         clip.close()
         return True
@@ -164,7 +166,7 @@ def main():
     except Exception as e:
         print(f"❌ YouTube Error: {e}")
 
-    # 5. Upload to Instagram (With Thumbnail)
+    # 5. Upload to Instagram (With Fixed Thumbnail)
     insta_caption = f"{caption_text}\n.\n.\n{HASHTAGS}"
     post_to_instagram(processed_video, thumbnail_img, insta_caption)
 
