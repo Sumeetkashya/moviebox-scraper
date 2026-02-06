@@ -3,7 +3,7 @@ from bs4 import BeautifulSoup
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 from google.auth.transport.requests import Request
-from instagrapi import Client  # <--- Ye naya hai
+from instagrapi import Client
 from moviepy.editor import VideoFileClip, ImageClip, CompositeVideoClip, vfx
 
 # --- 🛠️ FIX FOR PIL ERROR ---
@@ -16,7 +16,7 @@ if not hasattr(PIL.Image, 'ANTIALIAS'):
 PENDING_FOLDER_ID = "1q0fYCs6yAZG6dmlUH6ql4M5eLLbUPa2V"
 MOVIEBOX_URL = "https://moviebox.ph/share/post?id=6469190882641300568&package_name=com.community.oneroom"
 
-# Instagram Credentials (Backup ke liye)
+# Instagram Credentials
 INSTA_USER = "uselesss.guys"
 INSTA_PASS = "Maav5nik@me"
 
@@ -42,25 +42,25 @@ def get_services():
         creds.refresh(Request())
     return build('drive', 'v3', credentials=creds), build('youtube', 'v3', credentials=creds)
 
-# --- 📸 NEW: INSTAGRAM FUNCTION ---
-def post_to_instagram(video_path, caption):
+# --- 📸 UPDATED INSTAGRAM FUNCTION ---
+def post_to_instagram(video_path, thumbnail_path, caption):
     print("📸 Posting to Instagram Reels...")
     try:
         cl = Client()
         
-        # 1. GitHub Secret se Session uthao (Taaki Login Block na ho)
+        # 1. Load Session
         if "INSTA_SESSION" in os.environ:
             print("🔑 Loading Session from Secrets...")
             session_b64 = os.environ["INSTA_SESSION"]
             session_json = base64.b64decode(session_b64).decode()
             cl.set_settings(json.loads(session_json))
         
-        # 2. Login (Session use karega toh password ki zarurat nahi padegi usually)
+        # 2. Login
         cl.login(INSTA_USER, INSTA_PASS)
         
-        # 3. Upload Reel
-        print("📤 Uploading Reel...")
-        cl.clip_upload(video_path, caption)
+        # 3. Upload Reel WITH THUMBNAIL (Ye fix hai)
+        print("📤 Uploading Reel with Thumbnail...")
+        cl.clip_upload(video_path, caption, thumbnail=thumbnail_path)
         print("✅ Instagram Reel Posted Successfully!")
         return True
         
@@ -69,8 +69,8 @@ def post_to_instagram(video_path, caption):
         return False
 # ----------------------------------
 
-def process_video(input_path, output_path):
-    print("🎬 Editing Video: Speed 1.05x + Big Logo...")
+def process_video(input_path, output_path, thumb_path):
+    print("🎬 Editing Video & Generating Thumbnail...")
     try:
         clip = VideoFileClip(input_path)
         final_clip = clip.fx(vfx.speedx, 1.05)
@@ -85,7 +85,13 @@ def process_video(input_path, output_path):
                     .set_pos(("right", "top")))
             final_clip = CompositeVideoClip([final_clip, logo])
         
+        # Video Save
         final_clip.write_videofile(output_path, codec="libx264", audio_codec="aac", fps=24, preset="ultrafast", verbose=False, logger=None)
+        
+        # Thumbnail Save (1 second mark se snapshot lega)
+        final_clip.save_frame(thumb_path, t=1.0)
+        print("🖼️ Thumbnail Generated!")
+        
         clip.close()
         return True
     except Exception as e:
@@ -125,13 +131,14 @@ def main():
     print(f"📥 Downloading: {video_url}")
     raw_video = "raw_video.mp4"
     processed_video = "final_video.mp4"
+    thumbnail_img = "thumb.jpg"
     
     r = requests.get(video_url, stream=True)
     with open(raw_video, 'wb') as f:
         for chunk in r.iter_content(chunk_size=1024): f.write(chunk)
 
-    # 3. Edit Video
-    if not process_video(raw_video, processed_video):
+    # 3. Edit Video & Gen Thumbnail
+    if not process_video(raw_video, processed_video, thumbnail_img):
         return
 
     # 4. Upload to YouTube
@@ -157,9 +164,9 @@ def main():
     except Exception as e:
         print(f"❌ YouTube Error: {e}")
 
-    # 5. Upload to Instagram (Ye naya step hai)
+    # 5. Upload to Instagram (With Thumbnail)
     insta_caption = f"{caption_text}\n.\n.\n{HASHTAGS}"
-    post_to_instagram(processed_video, insta_caption)
+    post_to_instagram(processed_video, thumbnail_img, insta_caption)
 
     # 6. Google Drive Backup
     try:
@@ -174,6 +181,7 @@ def main():
     # Cleanup
     if os.path.exists(raw_video): os.remove(raw_video)
     if os.path.exists(processed_video): os.remove(processed_video)
+    if os.path.exists(thumbnail_img): os.remove(thumbnail_img)
     print("🎉 All Platforms Updated!")
 
 if __name__ == "__main__":
