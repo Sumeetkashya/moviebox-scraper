@@ -2,4 +2,7 @@ requests
 beautifulsoup4
 google-api-python-client
 google-auth-oauthlib
-moviepy
+moviepy==1.0.3
+decorator==4.4.2
+imageio==2.4.1
+imageio-ffmpeg==0.4.7
