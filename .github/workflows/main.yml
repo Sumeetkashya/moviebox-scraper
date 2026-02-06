@@ -2,11 +2,11 @@ name: Krold Mega Bot (Cloud)
 
 on:
   schedule:
-    - cron: '0 */4 * * *' # Har 4 ghante mein automatically chalega
-  workflow_dispatch:      # Manual button
+    - cron: '0 */4 * * *' # Har 4 ghante mein chalega
+  workflow_dispatch:      # Manual run button
 
 permissions:
-  contents: write         # History.txt update karne ke liye zaroori hai
+  contents: write         # History update karne ki permission
 
 jobs:
   run-cloud-bot:
@@ -20,10 +20,10 @@ jobs:
         with:
           python-version: '3.10'
           
-      - name: Install System Dependencies
+      - name: Install System Dependencies (FFmpeg)
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg # Video editing ke liye engine
+          sudo apt-get install -y ffmpeg
           
       - name: Install Python Libraries
         run: |
@@ -32,16 +32,13 @@ jobs:
         
       - name: Run Mega Bot
         env:
-          # In dono secrets ko GitHub Settings mein check kar lena
-          GDRIVE_API_KEY: ${{ secrets.GDRIVE_API_KEY }}
           YT_TOKEN_BASE64: ${{ secrets.YT_TOKEN_BASE64 }}
         run: python mega_bot.py
         
-      - name: Save History and Push
+      - name: Save History
         run: |
           git config --local user.name 'KroldBot'
           git config --local user.email 'bot@krold.it'
           git add history.txt
-          # Agar koi naya video nahi mila toh commit skip ho jayega
-          git commit -m "Updated history: New video processed" || echo "No changes to commit"
+          git commit -m "Updated history" || echo "No changes to commit"
           git push
