@@ -10,14 +10,12 @@ PENDING_FOLDER_ID = "1q0fYCs6yAZG6dmlUH6ql4M5eLLbUPa2V"
 MOVIEBOX_URL = "https://moviebox.ph/share/post?id=6469190882641300568&package_name=com.community.oneroom"
 
 # --- HASHTAGS & CAPTIONS ---
-# Ye hashtags har video ke description mein jayenge
 HASHTAGS = """
 #shorts #trending #viral #movies #cinema #bollywood #hollywood #action 
 #bestscenes #uselessguys #kroldit #foryou #fyp #movieclips #mustwatch 
 #entertainment #film #drama #suspense #shortsvideo
 """
 
-# Inme se koi ek random caption select hoga title ke liye
 CAPTIONS = [
     "Wait for the twist! 😱",
     "Ekdum kadak scene! 🔥",
@@ -29,13 +27,10 @@ CAPTIONS = [
 ]
 
 def get_services():
-    # YouTube aur Drive dono ke liye same Token use karenge
     token_data = base64.b64decode(os.environ["YT_TOKEN_BASE64"])
     creds = pickle.loads(token_data)
-    
     if creds.expired and creds.refresh_token:
         creds.refresh(Request())
-        
     return build('drive', 'v3', credentials=creds), build('youtube', 'v3', credentials=creds)
 
 def process_video(input_path, output_path):
@@ -43,24 +38,24 @@ def process_video(input_path, output_path):
     try:
         clip = VideoFileClip(input_path)
         
-        # 1. Speed badhao (1.05x) - Copyright bypass ke liye best setting
+        # 1. Speed badhao (1.05x)
         final_clip = clip.fx(vfx.speedx, 1.05)
         
         # 2. Logo Setup (Bada size: 120px)
         if os.path.exists("logo.png"):
-            print("✅ Logo found, adding to video...")
+            print("✅ Logo mil gaya, laga raha hoon...")
             logo = (ImageClip("logo.png")
                     .set_duration(final_clip.duration)
-                    .resize(height=120)   # <-- Bada Size
-                    .set_opacity(0.85)    # <-- Solid dikhega
-                    .margin(right=25, top=25, opacity=0) # Top-Right Corner
+                    .resize(height=120)   
+                    .set_opacity(0.85)    
+                    .margin(right=25, top=25, opacity=0) 
                     .set_pos(("right", "top")))
             
             final_clip = CompositeVideoClip([final_clip, logo])
         else:
             print("⚠️ Warning: 'logo.png' nahi mila! Bina logo ke proceed kar raha hoon.")
         
-        # Rendering (Ultrafast preset taaki GitHub time out na ho)
+        # Rendering
         final_clip.write_videofile(output_path, codec="libx264", audio_codec="aac", fps=24, preset="ultrafast", verbose=False, logger=None)
         clip.close()
         return True
@@ -78,10 +73,8 @@ def scrape_moviebox():
         if not data_script: return None
         
         data = json.loads(data_script.string)
-        # Sirf .mp4 links nikalo
         links = [item for item in data if isinstance(item, str) and item.endswith('.mp4')]
         
-        # History check
         if not os.path.exists("history.txt"): open("history.txt", "w").close()
         with open("history.txt", "r") as f: seen = f.read().splitlines()
         
@@ -94,54 +87,50 @@ def scrape_moviebox():
 
 def main():
     print("🚀 Bot Started...")
-    
-    # Login Services
     try:
         drive, yt = get_services()
     except Exception as e:
-        print(f"❌ Login Error (Secrets check karo): {e}")
-        return
+        print(f"❌ Login Error: {e}"); return
 
-    # Step 1: Video Dhoondho
+    # Step 1: Scrape
     print("🔍 Searching MovieBox...")
     video_url = scrape_moviebox()
     if not video_url:
-        print("💤 Koi naya video nahi mila. Sleeping."); return
+        print("💤 Koi naya video nahi mila."); return
 
     # Step 2: Download
     print(f"📥 Downloading: {video_url}")
     raw_video = "raw_video.mp4"
     processed_video = "final_video.mp4"
-    
     r = requests.get(video_url, stream=True)
     with open(raw_video, 'wb') as f:
         for chunk in r.iter_content(chunk_size=1024): f.write(chunk)
 
-    # Step 3: Edit (Logo + Speed)
+    # Step 3: Edit
     if not process_video(raw_video, processed_video):
         print("❌ Video Process Failed!"); return
 
-    # Step 4: Upload to Google Drive (Personal Account)
+    # Step 4: Drive Upload
     print("☁️ Uploading to Google Drive...")
     try:
         meta = {'name': f'Krold_Auto_{int(time.time())}.mp4', 'parents': [PENDING_FOLDER_ID]}
         media = MediaFileUpload(processed_video, mimetype='video/mp4')
-        drive_file = drive.files().create(body=meta, media_body=media).execute()
-        print(f"✅ Drive Upload Done! ID: {drive_file.get('id')}")
+        drive.files().create(body=meta, media_body=media).execute()
+        print("✅ Drive Upload Done!")
     except Exception as e:
-        print(f"⚠️ Drive Error (Skip kar raha hoon): {e}")
+        print(f"⚠️ Drive Error: {e}")
 
-    # Step 5: Upload to YouTube Shorts
+    # Step 5: YouTube Upload
     print("📺 Posting to YouTube...")
     try:
         selected_caption = random.choice(CAPTIONS)
-        full_description = f"{selected_caption}\n\nAutomated by Krold IT Solutions.\n{HASHTAGS}"
+        full_description = f"{selected_caption}\n\nAutomated by Krold IT.\n{HASHTAGS}"
         
         body = {
             'snippet': {
                 'title': f"{selected_caption} #Shorts",
                 'description': full_description,
-                'categoryId': '22' # People & Blogs
+                'categoryId': '22'
             },
             'status': {'privacyStatus': 'public'}
         }
@@ -149,8 +138,6 @@ def main():
         media_yt = MediaFileUpload(processed_video, chunksize=-1, resumable=True)
         yt.videos().insert(part="snippet,status", body=body, media_body=media_yt).execute()
         print("✅ YouTube Upload Successful!")
-        
-        # Update History Only on Success
         with open("history.txt", "a") as f: f.write(video_url + "\n")
         
     except Exception as e:
